@@ -31,4 +31,11 @@ export const TIPOS_PEDIDO = {
   BALCAO: 'balcao',
 }
 
+// Situação da loja, controlada pelo superadmin.
+export const SITUACOES_LOJA = {
+  PENDENTE: 'pendente',
+  ATIVA: 'ativa',
+  SUSPENSA: 'suspensa',
+}
+
 export const FORMAS_PAGAMENTO = ['dinheiro', 'pix', 'cartao']

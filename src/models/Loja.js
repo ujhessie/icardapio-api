@@ -1,4 +1,5 @@
 import mongoose from 'mongoose'
+import { SITUACOES_LOJA } from '../config/constantes.js'
 
 const lojaSchema = new mongoose.Schema(
   {
@@ -25,7 +26,12 @@ const lojaSchema = new mongoose.Schema(
     logo: { type: String, default: '' },
     corPrimaria: { type: String, default: '#e85d04' },
     aberta: { type: Boolean, default: true },
-    ativa: { type: Boolean, default: true },
+    // pendente = aguardando aprovação | ativa = liberada | suspensa = bloqueada
+    situacao: {
+      type: String,
+      enum: Object.values(SITUACOES_LOJA),
+      default: SITUACOES_LOJA.PENDENTE,
+    },
     proximoNumero: { type: Number, default: 1 },
   },
   { timestamps: { createdAt: 'criadoEm', updatedAt: 'atualizadoEm' } },

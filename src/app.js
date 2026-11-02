@@ -7,6 +7,8 @@ import { tratarErro } from './middlewares/tratarErro.js'
 import { rotasAuth } from './modules/auth/auth.routes.js'
 import { rotasLojas } from './modules/lojas/lojas.routes.js'
 import { rotasMinhaLoja } from './modules/lojas/minha-loja.routes.js'
+import { rotasCadastro } from './modules/cadastro/cadastro.routes.js'
+import { rotasSuper } from './modules/super/super.routes.js'
 
 const ESTADOS_BANCO = {
   0: 'desconectado',
@@ -34,6 +36,8 @@ app.get('/api/saude', (req, res) => {
 app.use('/api/auth', rotasAuth)
 app.use('/api/lojas', rotasLojas)
 app.use('/api/minha-loja', rotasMinhaLoja)
+app.use('/api/cadastro', rotasCadastro)
+app.use('/api/super', rotasSuper)
 
 app.use(rotaNaoEncontrada)
 app.use(tratarErro)
