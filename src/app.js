@@ -4,6 +4,9 @@ import mongoose from 'mongoose'
 import { env } from './config/env.js'
 import { rotaNaoEncontrada } from './middlewares/rotaNaoEncontrada.js'
 import { tratarErro } from './middlewares/tratarErro.js'
+import { rotasAuth } from './modules/auth/auth.routes.js'
+import { rotasLojas } from './modules/lojas/lojas.routes.js'
+import { rotasMinhaLoja } from './modules/lojas/minha-loja.routes.js'
 
 const ESTADOS_BANCO = {
   0: 'desconectado',
@@ -28,7 +31,9 @@ app.get('/api/saude', (req, res) => {
 })
 
 // As rotas dos módulos entram aqui, uma por linha, a partir da fase 1:
-// app.use('/api/auth', rotasAuth)
+app.use('/api/auth', rotasAuth)
+app.use('/api/lojas', rotasLojas)
+app.use('/api/minha-loja', rotasMinhaLoja)
 
 app.use(rotaNaoEncontrada)
 app.use(tratarErro)
