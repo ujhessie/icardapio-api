@@ -9,6 +9,8 @@ import { rotasLojas } from './modules/lojas/lojas.routes.js'
 import { rotasMinhaLoja } from './modules/lojas/minha-loja.routes.js'
 import { rotasCadastro } from './modules/cadastro/cadastro.routes.js'
 import { rotasSuper } from './modules/super/super.routes.js'
+import { rotasCardapio } from './modules/cardapio/cardapio.routes.js'
+import { rotasBairros } from './modules/bairros/bairros.routes.js'
 
 const ESTADOS_BANCO = {
   0: 'desconectado',
@@ -38,6 +40,8 @@ app.use('/api/lojas', rotasLojas)
 app.use('/api/minha-loja', rotasMinhaLoja)
 app.use('/api/cadastro', rotasCadastro)
 app.use('/api/super', rotasSuper)
+app.use('/api/cardapio', rotasCardapio)
+app.use('/api/bairros', rotasBairros)
 
 app.use(rotaNaoEncontrada)
 app.use(tratarErro)
