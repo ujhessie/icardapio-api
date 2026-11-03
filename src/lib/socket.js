@@ -1,5 +1,6 @@
 import { Server } from 'socket.io'
 import { env } from '../config/env.js'
+import { verificarToken } from './token.js'
 
 let io = null
 
@@ -9,13 +10,22 @@ export function iniciarSocket(servidorHttp) {
   })
 
   io.on('connection', (socket) => {
-    // TODO fase 4: exigir token do usuário aqui antes de deixar entrar na sala.
-    socket.on('entrar:loja', (lojaId) => {
-      if (lojaId) socket.join(`loja:${lojaId}`)
+    // O painel manda o token e entra só na sala da própria loja.
+    // Assim um lojista nunca recebe pedido de outro, mesmo tentando na mão.
+    socket.on('entrar:loja', (token) => {
+      try {
+        const dados = verificarToken(token)
+        if (dados.lojaId) socket.join(`loja:${dados.lojaId}`)
+      } catch {
+        // Token inválido: ignora e não entra em sala nenhuma.
+      }
     })
 
+    // Acompanhamento do cliente: o id do pedido é a chave da sala (sem login).
     socket.on('entrar:pedido', (pedidoId) => {
-      if (pedidoId) socket.join(`pedido:${pedidoId}`)
+      if (typeof pedidoId === 'string' && pedidoId.length >= 12) {
+        socket.join(`pedido:${pedidoId}`)
+      }
     })
   })
 

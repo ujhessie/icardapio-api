@@ -1,6 +1,7 @@
 import {
   buscarPedidoPublico,
   criarPedido,
+  listarPedidosPublicos,
   montarCardapio,
 } from './publico.service.js'
 
@@ -14,4 +15,8 @@ export async function criar(req, res) {
 
 export async function detalharPedido(req, res) {
   res.json({ pedido: await buscarPedidoPublico(req.params.slug, req.params.id) })
+}
+
+export async function meusPedidos(req, res) {
+  res.json({ pedidos: await listarPedidosPublicos(req.params.slug, req.query.ids) })
 }

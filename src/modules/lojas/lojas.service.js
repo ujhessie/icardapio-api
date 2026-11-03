@@ -1,4 +1,5 @@
 import { ApiError } from '../../lib/ApiError.js'
+import { normalizarDatasEspeciais, normalizarHorarios } from '../../lib/horario.js'
 import { criptografarSenha } from '../../lib/senha.js'
 import { gerarSlug } from '../../lib/slug.js'
 import { PAPEIS, SITUACOES_LOJA } from '../../config/constantes.js'
@@ -7,7 +8,16 @@ import { Usuario } from '../../models/Usuario.js'
 
 // Campos que o usuário pode alterar. `slug` fica de fora de propósito: é a URL pública.
 // `situacao` também: só o superadmin mexe, por uma rota própria.
-const CAMPOS_EDITAVEIS = ['nome', 'telefone', 'logo', 'corPrimaria', 'aberta', 'endereco']
+const CAMPOS_EDITAVEIS = [
+  'nome',
+  'telefone',
+  'logo',
+  'corPrimaria',
+  'aberta',
+  'endereco',
+  'horarios',
+  'datasEspeciais',
+]
 
 // URLs que o sistema já usa (ou pode usar) e não podem virar nome de loja.
 const SLUGS_RESERVADOS = ['admin', 'api', 'auth', 'login', 'painel', 'publico', 'sistema', 'lojas']
@@ -135,6 +145,10 @@ function aplicarCampos(loja, dados) {
 
     if (campo === 'endereco') {
       loja.endereco = { ...loja.endereco.toObject(), ...dados.endereco }
+    } else if (campo === 'horarios') {
+      loja.horarios = normalizarHorarios(dados.horarios)
+    } else if (campo === 'datasEspeciais') {
+      loja.datasEspeciais = normalizarDatasEspeciais(dados.datasEspeciais)
     } else {
       loja[campo] = dados[campo]
     }

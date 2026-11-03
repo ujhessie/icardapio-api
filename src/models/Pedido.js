@@ -69,11 +69,15 @@ const pedidoSchema = new mongoose.Schema(
     // Só faz sentido no dinheiro. Guardado em centavos.
     trocoPara: { type: Number, default: 0, min: 0 },
     observacao: { type: String, default: '', trim: true },
+    // Arquivar é etiqueta, não exclusão: o pedido sai do quadro mas continua
+    // valendo para relatórios, faturamento e histórico.
+    arquivado: { type: Boolean, default: false },
   },
   { timestamps: { createdAt: 'criadoEm', updatedAt: 'atualizadoEm' } },
 )
 
 pedidoSchema.index({ lojaId: 1, numero: 1 }, { unique: true })
 pedidoSchema.index({ lojaId: 1, status: 1, criadoEm: -1 })
+pedidoSchema.index({ lojaId: 1, arquivado: 1, criadoEm: -1 })
 
 export const Pedido = mongoose.model('Pedido', pedidoSchema)

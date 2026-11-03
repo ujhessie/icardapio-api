@@ -4,7 +4,11 @@ import {
   STATUS_PEDIDO,
   TIPOS_PEDIDO,
 } from '../../config/constantes.js'
+import mongoose from 'mongoose'
 import { ApiError } from '../../lib/ApiError.js'
+import { statusDaLoja } from '../../lib/horario.js'
+import { pedidoPublico } from '../../lib/pedidoPublico.js'
+import { emitirParaLoja } from '../../lib/socket.js'
 import { Bairro } from '../../models/Bairro.js'
 import { Categoria } from '../../models/Categoria.js'
 import { Loja } from '../../models/Loja.js'
@@ -55,6 +59,10 @@ export async function montarCardapio(slug) {
     Bairro.find({ lojaId: loja._id, ativo: true }).sort({ nome: 1 }),
   ])
 
+  // O front recalcula esse status sozinho enquanto a página está aberta; aqui
+  // vai o valor do instante em que a página abriu.
+  const status = statusDaLoja(loja)
+
   return {
     loja: {
       _id: loja._id,
@@ -63,7 +71,12 @@ export async function montarCardapio(slug) {
       telefone: loja.telefone,
       logo: loja.logo,
       corPrimaria: loja.corPrimaria,
+      // `aberta` é o interruptor do dono; `abertoAgora` já considera a grade.
       aberta: loja.aberta,
+      abertoAgora: status.aberto,
+      statusTexto: status.texto,
+      horarios: loja.horarios,
+      datasEspeciais: loja.datasEspeciais,
       endereco: loja.endereco,
     },
     // Categoria sem produto disponível não aparece no cardápio.
@@ -91,31 +104,15 @@ export async function montarCardapio(slug) {
   }
 }
 
-function pedidoPublico(pedido) {
-  return {
-    _id: pedido._id,
-    numero: pedido.numero,
-    status: pedido.status,
-    tipo: pedido.tipo,
-    cliente: pedido.cliente,
-    endereco: pedido.endereco,
-    bairroNome: pedido.bairroNome,
-    taxaEntrega: pedido.taxaEntrega,
-    itens: pedido.itens,
-    subtotal: pedido.subtotal,
-    total: pedido.total,
-    pagamento: pedido.pagamento,
-    trocoPara: pedido.trocoPara,
-    observacao: pedido.observacao,
-    criadoEm: pedido.criadoEm,
-  }
-}
-
 export async function criarPedido(slug, dados = {}) {
   const loja = await buscarLojaAtiva(slug)
+  const status = statusDaLoja(loja)
 
-  if (!loja.aberta) {
-    throw new ApiError(400, 'A loja está fechada e não está aceitando pedidos agora')
+  if (!status.aberto) {
+    throw new ApiError(
+      400,
+      `A loja não está aceitando pedidos agora. ${status.texto}`,
+    )
   }
 
   if (!Object.values(TIPOS_PEDIDO).includes(dados.tipo)) {
@@ -241,6 +238,10 @@ export async function criarPedido(slug, dados = {}) {
     observacao: texto(dados.observacao),
   })
 
+  // Avisa o painel da loja na hora: sem isso o lojista só veria o pedido
+  // recarregando a página.
+  emitirParaLoja(loja._id, 'pedido:novo', { pedido: pedidoPublico(pedido) })
+
   return pedidoPublico(pedido)
 }
 
@@ -254,4 +255,32 @@ export async function buscarPedidoPublico(slug, id) {
   }
 
   return pedidoPublico(pedido)
+}
+
+const LIMITE_MEUS_PEDIDOS = 50
+
+/**
+ * Histórico do cliente sem login: o front guarda os ids no localStorage e manda
+ * de volta. O id do pedido é o segredo (igual ao link de acompanhamento), então
+ * só devolvemos id válido e pedido da própria loja — nunca de outra.
+ */
+export async function listarPedidosPublicos(slug, ids) {
+  const loja = await buscarLojaPorSlug(slug)
+
+  const lista = String(ids || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => mongoose.isValidObjectId(item))
+    .slice(0, LIMITE_MEUS_PEDIDOS)
+
+  if (lista.length === 0) return []
+
+  const pedidos = await Pedido.find({ _id: { $in: lista }, lojaId: loja._id })
+  const porId = new Map(pedidos.map((pedido) => [String(pedido._id), pedido]))
+
+  // Na ordem em que o front pediu: o mais recente primeiro.
+  return lista
+    .map((id) => porId.get(id))
+    .filter(Boolean)
+    .map(pedidoPublico)
 }
