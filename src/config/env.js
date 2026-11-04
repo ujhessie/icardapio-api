@@ -1,7 +1,7 @@
 import 'dotenv/config'
 
 const env = {
-  porta: Number(process.env.PORTA || 4000),
+  porta: Number(process.env.PORTA || process.env.PORT || 4000),
   mongoUri: process.env.MONGODB_URI,
   jwtSegredo: process.env.JWT_SEGREDO,
   jwtExpiraEm: process.env.JWT_EXPIRA_EM || '7d',
