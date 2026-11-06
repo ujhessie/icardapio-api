@@ -72,6 +72,16 @@ const pedidoSchema = new mongoose.Schema(
     // Arquivar é etiqueta, não exclusão: o pedido sai do quadro mas continua
     // valendo para relatórios, faturamento e histórico.
     arquivado: { type: Boolean, default: false },
+    // Quando o pedido entrou em cada etapa. O contador da tela usa esses
+    // horários: "pronto às 20:15 + 10 min" continua valendo mesmo depois que o
+    // pedido sai para entrega. Pedido antigo não tem — aí cai no atualizadoEm.
+    marcos: {
+      aceitoEm: { type: Date },
+      preparandoEm: { type: Date },
+      prontoEm: { type: Date },
+      saiuEm: { type: Date },
+      entregueEm: { type: Date },
+    },
   },
   { timestamps: { createdAt: 'criadoEm', updatedAt: 'atualizadoEm' } },
 )

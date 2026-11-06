@@ -1,4 +1,5 @@
-import { ORDEM_STATUS, STATUS_PEDIDO } from '../../config/constantes.js'
+import mongoose from 'mongoose'
+import { ORDEM_STATUS, STATUS_EM_ABERTO, STATUS_PEDIDO } from '../../config/constantes.js'
 import { ApiError } from '../../lib/ApiError.js'
 import { pedidoPublico } from '../../lib/pedidoPublico.js'
 import { emitirParaLoja, emitirParaPedido } from '../../lib/socket.js'
@@ -14,6 +15,20 @@ function inicioDoDia() {
   const inicio = new Date()
   inicio.setHours(0, 0, 0, 0)
   return inicio
+}
+
+// Em que "marco" do pedido cada status entra. Cancelado não tem marco: não é
+// uma etapa do atendimento.
+const MARCO_DO_STATUS = {
+  [STATUS_PEDIDO.ACEITO]: 'aceitoEm',
+  [STATUS_PEDIDO.PREPARANDO]: 'preparandoEm',
+  [STATUS_PEDIDO.PRONTO]: 'prontoEm',
+  [STATUS_PEDIDO.SAIU_ENTREGA]: 'saiuEm',
+  [STATUS_PEDIDO.ENTREGUE]: 'entregueEm',
+}
+
+function marcoDoStatus(status) {
+  return MARCO_DO_STATUS[status] || null
 }
 
 function ehVerdadeiro(valor) {
@@ -36,7 +51,12 @@ export async function listarPedidos(lojaId, filtros = {}) {
   }
 
   if (ehVerdadeiro(filtros.hoje)) {
-    consulta.criadoEm = { $gte: inicioDoDia() }
+    // Pedido em aberto é sempre do "agora". Sem isso, pedido que ficou de
+    // ontem conta no resumo mas some do quadro — e some pra sempre.
+    consulta.$or = [
+      { criadoEm: { $gte: inicioDoDia() } },
+      { status: { $in: STATUS_EM_ABERTO } },
+    ]
   }
 
   return Pedido.find(consulta).sort({ criadoEm: -1 }).limit(LIMITE_LISTA)
@@ -82,6 +102,10 @@ export async function mudarStatus(lojaId, id, novoStatus) {
   }
 
   pedido.status = novoStatus
+
+  const marco = marcoDoStatus(novoStatus)
+  if (marco) pedido.marcos[marco] = new Date()
+
   await pedido.save()
 
   // Painel de todas as abas da loja + tela de acompanhamento do cliente.
@@ -175,5 +199,88 @@ export async function resumoPedidos(lojaId) {
     entreguesHoje,
     // Soma em centavos, como todo valor do sistema.
     faturamentoHoje: faturamento[0]?.total || 0,
+  }
+}
+
+// ---------- Estatísticas (gráfico de vendas do painel) ----------
+
+// O servidor roda em UTC na Vercel: agrupar por dia sem fuso jogaria a venda
+// da noite para o dia seguinte.
+const FUSO = 'America/Sao_Paulo'
+const PERIODOS = [7, 30]
+
+function diasDoPeriodo(quantidade) {
+  const dias = []
+  const agora = Date.now()
+
+  for (let atras = quantidade - 1; atras >= 0; atras -= 1) {
+    const dia = new Date(agora - atras * 24 * 60 * 60 * 1000)
+
+    dias.push({
+      // AAAA-MM-DD no fuso da loja: é a chave que casa com a agregação.
+      data: dia.toLocaleDateString('sv-SE', { timeZone: FUSO }),
+      rotulo: dia.toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        timeZone: FUSO,
+      }),
+      diaSemana: dia
+        .toLocaleDateString('pt-BR', { weekday: 'short', timeZone: FUSO })
+        .replace('.', ''),
+    })
+  }
+
+  return dias
+}
+
+/**
+ * Vendas por dia, para o gráfico do painel.
+ *
+ * Uma única agregação por período: o banco agrupa, o front só desenha. O
+ * índice { lojaId, status, criadoEm } cobre o filtro.
+ */
+export async function estatisticasPedidos(lojaId, periodo) {
+  const quantidade = Number(periodo) || 7
+
+  if (!PERIODOS.includes(quantidade)) {
+    throw new ApiError(400, 'Período inválido. Use 7 ou 30 dias.')
+  }
+
+  const dias = diasDoPeriodo(quantidade)
+  // Brasil não tem mais horário de verão: deslocamento fixo.
+  const inicio = new Date(`${dias[0].data}T00:00:00-03:00`)
+
+  const linhas = await Pedido.aggregate([
+    {
+      $match: {
+        // Aggregate não converte string em ObjectId: converter na mão.
+        lojaId: new mongoose.Types.ObjectId(String(lojaId)),
+        status: STATUS_PEDIDO.ENTREGUE,
+        criadoEm: { $gte: inicio },
+      },
+    },
+    {
+      $group: {
+        _id: { $dateToString: { format: '%Y-%m-%d', date: '$criadoEm', timezone: FUSO } },
+        pedidos: { $sum: 1 },
+        faturamento: { $sum: '$total' },
+      },
+    },
+  ])
+
+  const porDia = new Map(linhas.map((linha) => [linha._id, linha]))
+
+  // Dia sem venda precisa aparecer no gráfico como zero, não sumir.
+  const serie = dias.map((dia) => ({
+    ...dia,
+    pedidos: porDia.get(dia.data)?.pedidos || 0,
+    faturamento: porDia.get(dia.data)?.faturamento || 0,
+  }))
+
+  return {
+    dias: quantidade,
+    serie,
+    totalPedidos: serie.reduce((soma, dia) => soma + dia.pedidos, 0),
+    totalFaturamento: serie.reduce((soma, dia) => soma + dia.faturamento, 0),
   }
 }

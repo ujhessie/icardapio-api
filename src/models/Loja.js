@@ -1,5 +1,5 @@
 import mongoose from 'mongoose'
-import { SITUACOES_LOJA } from '../config/constantes.js'
+import { SITUACOES_LOJA, TEMPO_MAX, TEMPO_MIN, TEMPOS_PADRAO } from '../config/constantes.js'
 
 const horarioSchema = new mongoose.Schema(
   {
@@ -21,6 +21,17 @@ const dataEspecialSchema = new mongoose.Schema(
     fechado: { type: Boolean, default: true },
     abre: { type: String, default: '' },
     fecha: { type: String, default: '' },
+  },
+  { _id: false },
+)
+
+const temposSchema = new mongoose.Schema(
+  {
+    // Minutos que o pedido pode ficar em cada etapa antes de virar alerta.
+    aceitar: { type: Number, default: TEMPOS_PADRAO.aceitar, min: TEMPO_MIN, max: TEMPO_MAX },
+    preparar: { type: Number, default: TEMPOS_PADRAO.preparar, min: TEMPO_MIN, max: TEMPO_MAX },
+    pronto: { type: Number, default: TEMPOS_PADRAO.pronto, min: TEMPO_MIN, max: TEMPO_MAX },
+    entregar: { type: Number, default: TEMPOS_PADRAO.entregar, min: TEMPO_MIN, max: TEMPO_MAX },
   },
   { _id: false },
 )
@@ -54,6 +65,8 @@ const lojaSchema = new mongoose.Schema(
     // `aberta` (protege as lojas que existiam antes dos horários).
     horarios: { type: [horarioSchema], default: [] },
     datasEspeciais: { type: [dataEspecialSchema], default: [] },
+    // Tempo alvo de cada etapa (minutos) — o lojista edita em Configurações.
+    tempos: { type: temposSchema, default: () => ({ ...TEMPOS_PADRAO }) },
     // pendente = aguardando aprovação | ativa = liberada | suspensa = bloqueada
     situacao: {
       type: String,

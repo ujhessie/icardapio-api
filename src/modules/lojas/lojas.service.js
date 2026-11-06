@@ -2,7 +2,7 @@ import { ApiError } from '../../lib/ApiError.js'
 import { normalizarDatasEspeciais, normalizarHorarios } from '../../lib/horario.js'
 import { criptografarSenha } from '../../lib/senha.js'
 import { gerarSlug } from '../../lib/slug.js'
-import { PAPEIS, SITUACOES_LOJA } from '../../config/constantes.js'
+import { PAPEIS, SITUACOES_LOJA, TEMPO_MAX, TEMPO_MIN, TEMPOS_PADRAO } from '../../config/constantes.js'
 import { Loja } from '../../models/Loja.js'
 import { Usuario } from '../../models/Usuario.js'
 
@@ -17,7 +17,39 @@ const CAMPOS_EDITAVEIS = [
   'endereco',
   'horarios',
   'datasEspeciais',
+  'tempos',
 ]
+
+/*
+ * Tempos de atendimento: aceita alteração parcial (só "pronto", por exemplo) e
+ * nunca deixa gravar lixo. Minuto é inteiro de 1 a 240 — meio minuto não dá
+ * para digitar e 0 travaria o pedido em atraso na hora.
+ */
+function normalizarTempos(dados, atuais) {
+  const base = { ...TEMPOS_PADRAO, ...(atuais || {}) }
+  const resultado = { ...base }
+
+  if (!dados || typeof dados !== 'object') {
+    throw new ApiError(400, 'Tempos inválidos')
+  }
+
+  for (const chave of Object.keys(TEMPOS_PADRAO)) {
+    if (dados[chave] === undefined) continue
+
+    const valor = Number(dados[chave])
+
+    if (!Number.isInteger(valor) || valor < TEMPO_MIN || valor > TEMPO_MAX) {
+      throw new ApiError(
+        400,
+        `O tempo de "${chave}" precisa ser um número inteiro de ${TEMPO_MIN} a ${TEMPO_MAX} minutos`,
+      )
+    }
+
+    resultado[chave] = valor
+  }
+
+  return resultado
+}
 
 // URLs que o sistema já usa (ou pode usar) e não podem virar nome de loja.
 const SLUGS_RESERVADOS = ['admin', 'api', 'auth', 'login', 'painel', 'publico', 'sistema', 'lojas']
@@ -147,6 +179,8 @@ function aplicarCampos(loja, dados) {
       loja.endereco = { ...loja.endereco.toObject(), ...dados.endereco }
     } else if (campo === 'horarios') {
       loja.horarios = normalizarHorarios(dados.horarios)
+    } else if (campo === 'tempos') {
+      loja.tempos = normalizarTempos(dados.tempos, loja.tempos?.toObject())
     } else if (campo === 'datasEspeciais') {
       loja.datasEspeciais = normalizarDatasEspeciais(dados.datasEspeciais)
     } else {

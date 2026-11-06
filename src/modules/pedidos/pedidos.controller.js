@@ -1,6 +1,7 @@
 import {
   arquivarPedido,
   buscarPedido,
+  estatisticasPedidos,
   listarPedidos,
   mudarStatus,
   removerPedido,
@@ -27,6 +28,10 @@ export async function atualizarStatus(req, res) {
 
 export async function resumo(req, res) {
   res.json({ resumo: await resumoPedidos(req.usuario.lojaId) })
+}
+
+export async function estatisticas(req, res) {
+  res.json({ estatisticas: await estatisticasPedidos(req.usuario.lojaId, req.query.dias) })
 }
 
 export async function arquivar(req, res) {
