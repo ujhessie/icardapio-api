@@ -70,6 +70,7 @@ export async function montarCardapio(slug) {
       slug: loja.slug,
       telefone: loja.telefone,
       logo: loja.logo,
+      capa: loja.capa,
       corPrimaria: loja.corPrimaria,
       // `aberta` é o interruptor do dono; `abertoAgora` já considera a grade.
       aberta: loja.aberta,

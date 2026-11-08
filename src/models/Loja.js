@@ -59,6 +59,9 @@ const lojaSchema = new mongoose.Schema(
       estado: { type: String, default: '' },
     },
     logo: { type: String, default: '' },
+    // Foto do topo do cardápio (URL). Vazia = topo com a cor da loja, sem
+    // buraco na tela: loja antiga continua bonita sem ter foto.
+    capa: { type: String, default: '' },
     corPrimaria: { type: String, default: '#e85d04' },
     aberta: { type: Boolean, default: true },
     // Grade da semana. Vazia = loja sem grade cadastrada: vale só o interruptor

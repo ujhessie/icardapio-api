@@ -12,6 +12,7 @@ const CAMPOS_EDITAVEIS = [
   'nome',
   'telefone',
   'logo',
+  'capa',
   'corPrimaria',
   'aberta',
   'endereco',
