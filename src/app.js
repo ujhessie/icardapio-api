@@ -13,6 +13,7 @@ import { rotasCardapio } from './modules/cardapio/cardapio.routes.js'
 import { rotasBairros } from './modules/bairros/bairros.routes.js'
 import { rotasPedidos } from './modules/pedidos/pedidos.routes.js'
 import { rotasPublico } from './modules/publico/publico.routes.js'
+import { rotasUploads } from './modules/uploads/uploads.routes.js'
 
 const ESTADOS_BANCO = {
   0: 'desconectado',
@@ -46,6 +47,7 @@ app.use('/api/cardapio', rotasCardapio)
 app.use('/api/bairros', rotasBairros)
 app.use('/api/pedidos', rotasPedidos)
 app.use('/api/publico', rotasPublico)
+app.use('/api/uploads', rotasUploads)
 
 app.use(rotaNaoEncontrada)
 app.use(tratarErro)
