@@ -2,7 +2,16 @@ import { ApiError } from '../../lib/ApiError.js'
 import { normalizarDatasEspeciais, normalizarHorarios } from '../../lib/horario.js'
 import { criptografarSenha } from '../../lib/senha.js'
 import { gerarSlug } from '../../lib/slug.js'
-import { PAPEIS, SITUACOES_LOJA, TEMPO_MAX, TEMPO_MIN, TEMPOS_PADRAO } from '../../config/constantes.js'
+import {
+  FLUXO_PADRAO,
+  MODOS_BALCAO,
+  ORDEM_STATUS,
+  PAPEIS,
+  SITUACOES_LOJA,
+  TEMPO_MAX,
+  TEMPO_MIN,
+  TEMPOS_PADRAO,
+} from '../../config/constantes.js'
 import { Loja } from '../../models/Loja.js'
 import { Usuario } from '../../models/Usuario.js'
 
@@ -19,6 +28,7 @@ const CAMPOS_EDITAVEIS = [
   'horarios',
   'datasEspeciais',
   'tempos',
+  'fluxoPedidos',
 ]
 
 /*
@@ -47,6 +57,51 @@ function normalizarTempos(dados, atuais) {
     }
 
     resultado[chave] = valor
+  }
+
+  return resultado
+}
+
+/*
+ * Fluxo de pedidos: aceita alteração parcial (só `autoAceite`, por exemplo).
+ *
+ * `etapas` é o que a loja quer ver — painel e tela do cliente. A ordem é sempre
+ * a do atendimento, não a que veio no corpo: assim ninguém manda um fluxo
+ * invertido e a tela não desenha "Entregue" antes de "Novo".
+ */
+function normalizarFluxo(dados, atuais) {
+  const base = { ...FLUXO_PADRAO, ...(atuais || {}) }
+  const resultado = { ...base }
+
+  if (!dados || typeof dados !== 'object') {
+    throw new ApiError(400, 'Fluxo de pedidos inválido')
+  }
+
+  if (dados.etapas !== undefined) {
+    if (!Array.isArray(dados.etapas) || dados.etapas.length === 0) {
+      throw new ApiError(400, 'Escolha pelo menos uma etapa para o fluxo')
+    }
+
+    const invalida = dados.etapas.find((etapa) => !ORDEM_STATUS.includes(etapa))
+
+    if (invalida) {
+      throw new ApiError(400, `Etapa inválida: "${invalida}"`)
+    }
+
+    // Filtra duplicadas e reordena pelo caminho do atendimento.
+    resultado.etapas = ORDEM_STATUS.filter((etapa) => dados.etapas.includes(etapa))
+  }
+
+  if (dados.autoAceite !== undefined) {
+    resultado.autoAceite = Boolean(dados.autoAceite)
+  }
+
+  if (dados.modoBalcao !== undefined) {
+    if (!Object.values(MODOS_BALCAO).includes(dados.modoBalcao)) {
+      throw new ApiError(400, 'Modo de balcão inválido. Use cliente, link ou off.')
+    }
+
+    resultado.modoBalcao = dados.modoBalcao
   }
 
   return resultado
@@ -182,6 +237,8 @@ function aplicarCampos(loja, dados) {
       loja.horarios = normalizarHorarios(dados.horarios)
     } else if (campo === 'tempos') {
       loja.tempos = normalizarTempos(dados.tempos, loja.tempos?.toObject())
+    } else if (campo === 'fluxoPedidos') {
+      loja.fluxoPedidos = normalizarFluxo(dados.fluxoPedidos, loja.fluxoPedidos?.toObject())
     } else if (campo === 'datasEspeciais') {
       loja.datasEspeciais = normalizarDatasEspeciais(dados.datasEspeciais)
     } else {

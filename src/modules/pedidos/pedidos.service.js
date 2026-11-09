@@ -31,6 +31,24 @@ function marcoDoStatus(status) {
   return MARCO_DO_STATUS[status] || null
 }
 
+/*
+ * Voltar uma etapa apaga os marcos das etapas que deixaram de existir.
+ *
+ * Sem isso o pedido voltaria com "prontoEm" de 20:40 e "saiuEm" de 20:52
+ * gravados: o contador da etapa nova mostraria horas que não aconteceram e o
+ * resumo de tempos viraria ficção.
+ */
+function limparMarcosDepoisDe(pedido, statusDestino) {
+  const destino = ORDEM_STATUS.indexOf(statusDestino)
+
+  for (const status of ORDEM_STATUS) {
+    if (ORDEM_STATUS.indexOf(status) <= destino) continue
+
+    const marco = marcoDoStatus(status)
+    if (marco) pedido.marcos[marco] = undefined
+  }
+}
+
 function ehVerdadeiro(valor) {
   return valor === true || valor === '1' || valor === 'true'
 }
@@ -59,7 +77,11 @@ export async function listarPedidos(lojaId, filtros = {}) {
     ]
   }
 
-  return Pedido.find(consulta).sort({ criadoEm: -1 }).limit(LIMITE_LISTA)
+  // Fila: mais antigo primeiro, porque quem chegou antes é prioridade.
+  // Histórico (arquivados) é o contrário — ali o que interessa é o mais recente.
+  const ordem = ehVerdadeiro(filtros.arquivados) ? -1 : 1
+
+  return Pedido.find(consulta).sort({ criadoEm: ordem }).limit(LIMITE_LISTA)
 }
 
 export async function buscarPedido(lojaId, id) {
@@ -91,14 +113,14 @@ export async function mudarStatus(lojaId, id, novoStatus) {
     return pedido
   }
 
-  // Fora o cancelamento, o status só avança — nunca volta.
+  // Cancelar é sempre permitido (menos em pedido já finalizado, tratado acima).
+  // Fora isso, o status anda para frente e também pode voltar: quem atende às
+  // vezes clica cedo demais e precisa corrigir.
   if (novoStatus !== STATUS_PEDIDO.CANCELADO) {
     const atual = ORDEM_STATUS.indexOf(pedido.status)
     const novo = ORDEM_STATUS.indexOf(novoStatus)
 
-    if (novo <= atual) {
-      throw new ApiError(400, 'O status do pedido só avança na ordem do atendimento')
-    }
+    if (novo < atual) limparMarcosDepoisDe(pedido, novoStatus)
   }
 
   pedido.status = novoStatus

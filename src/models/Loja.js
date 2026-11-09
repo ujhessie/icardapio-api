@@ -1,5 +1,13 @@
 import mongoose from 'mongoose'
-import { SITUACOES_LOJA, TEMPO_MAX, TEMPO_MIN, TEMPOS_PADRAO } from '../config/constantes.js'
+import {
+  FLUXO_PADRAO,
+  MODOS_BALCAO,
+  ORDEM_STATUS,
+  SITUACOES_LOJA,
+  TEMPO_MAX,
+  TEMPO_MIN,
+  TEMPOS_PADRAO,
+} from '../config/constantes.js'
 
 const horarioSchema = new mongoose.Schema(
   {
@@ -32,6 +40,31 @@ const temposSchema = new mongoose.Schema(
     preparar: { type: Number, default: TEMPOS_PADRAO.preparar, min: TEMPO_MIN, max: TEMPO_MAX },
     pronto: { type: Number, default: TEMPOS_PADRAO.pronto, min: TEMPO_MIN, max: TEMPO_MAX },
     entregar: { type: Number, default: TEMPOS_PADRAO.entregar, min: TEMPO_MIN, max: TEMPO_MAX },
+  },
+  { _id: false },
+)
+
+/*
+ * Fluxo de pedidos da loja.
+ *
+ * `etapas` é o que aparece no painel E na tela de acompanhamento do cliente:
+ * loja que só trabalha com delivery pode esconder "Pronto", por exemplo. O
+ * status interno não muda — só deixa de ser mostrado.
+ */
+const fluxoPedidosSchema = new mongoose.Schema(
+  {
+    etapas: {
+      type: [String],
+      enum: ORDEM_STATUS,
+      default: () => [...FLUXO_PADRAO.etapas],
+    },
+    // Pedido que chega já entra como "aceito", sem o lojista precisar clicar.
+    autoAceite: { type: Boolean, default: FLUXO_PADRAO.autoAceite },
+    modoBalcao: {
+      type: String,
+      enum: Object.values(MODOS_BALCAO),
+      default: FLUXO_PADRAO.modoBalcao,
+    },
   },
   { _id: false },
 )
@@ -70,6 +103,8 @@ const lojaSchema = new mongoose.Schema(
     datasEspeciais: { type: [dataEspecialSchema], default: [] },
     // Tempo alvo de cada etapa (minutos) — o lojista edita em Configurações.
     tempos: { type: temposSchema, default: () => ({ ...TEMPOS_PADRAO }) },
+    // Quais etapas a loja mostra, se aceita pedido sozinho e como é o balcão.
+    fluxoPedidos: { type: fluxoPedidosSchema, default: () => ({}) },
     // pendente = aguardando aprovação | ativa = liberada | suspensa = bloqueada
     situacao: {
       type: String,

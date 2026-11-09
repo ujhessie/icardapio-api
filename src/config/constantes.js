@@ -16,7 +16,8 @@ export const STATUS_PEDIDO = {
   CANCELADO: 'cancelado',
 }
 
-// Ordem do kanban. Serve para impedir que o status volte para trás.
+// Ordem do kanban: define o caminho normal do atendimento (o status pode
+// voltar, mas esse é o sentido em que ele "avança").
 export const ORDEM_STATUS = [
   STATUS_PEDIDO.NOVO,
   STATUS_PEDIDO.ACEITO,
@@ -29,6 +30,28 @@ export const ORDEM_STATUS = [
 export const TIPOS_PEDIDO = {
   DELIVERY: 'delivery',
   BALCAO: 'balcao',
+  // Pedido lançado pelo próprio painel, para consumo no salão.
+  MESA: 'mesa',
+}
+
+// Tipos que o cliente pode escolher sozinho no cardápio. Mesa é coisa do
+// balcão: quem lança é o atendente, não o cliente.
+export const TIPOS_DO_CLIENTE = [TIPOS_PEDIDO.DELIVERY, TIPOS_PEDIDO.BALCAO]
+
+// Como o balcão aparece para o cliente no cardápio.
+export const MODOS_BALCAO = {
+  CLIENTE: 'cliente', // pode pedir e retirar no balcão
+  LINK: 'link', // só por link exclusivo do balcão
+  DESLIGADO: 'off', // sem balcão
+}
+
+// Fluxo de etapas da loja. Loja antiga (sem o campo gravado) usa exatamente
+// isto — por isso o padrão mora aqui e não só no schema do Mongoose, que não
+// alcança documento já existente.
+export const FLUXO_PADRAO = {
+  etapas: [...ORDEM_STATUS],
+  autoAceite: false,
+  modoBalcao: MODOS_BALCAO.CLIENTE,
 }
 
 // Situação da loja, controlada pelo superadmin.

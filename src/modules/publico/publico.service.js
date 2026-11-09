@@ -2,6 +2,7 @@ import {
   FORMAS_PAGAMENTO,
   SITUACOES_LOJA,
   STATUS_PEDIDO,
+  TIPOS_DO_CLIENTE,
   TIPOS_PEDIDO,
 } from '../../config/constantes.js'
 import mongoose from 'mongoose'
@@ -116,7 +117,7 @@ export async function criarPedido(slug, dados = {}) {
     )
   }
 
-  if (!Object.values(TIPOS_PEDIDO).includes(dados.tipo)) {
+  if (!TIPOS_DO_CLIENTE.includes(dados.tipo)) {
     throw new ApiError(400, 'Tipo de pedido inválido')
   }
 

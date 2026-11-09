@@ -34,6 +34,8 @@ const pedidoSchema = new mongoose.Schema(
       enum: Object.values(TIPOS_PEDIDO),
       required: true,
     },
+    // Só faz sentido em pedido de mesa (lançado pelo painel).
+    mesa: { type: Number, min: 1, default: null },
     endereco: {
       rua: { type: String, default: '' },
       numero: { type: String, default: '' },
