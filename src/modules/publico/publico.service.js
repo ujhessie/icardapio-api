@@ -80,6 +80,9 @@ export async function montarCardapio(slug) {
       horarios: loja.horarios,
       datasEspeciais: loja.datasEspeciais,
       endereco: loja.endereco,
+      // A tela de acompanhamento desenha os mesmos passos que o painel: se a
+      // loja esconde uma etapa, o cliente não vê essa etapa.
+      fluxoPedidos: loja.fluxoPedidos,
     },
     // Categoria sem produto disponível não aparece no cardápio.
     categorias: categorias
@@ -195,7 +198,6 @@ export async function criarPedido(slug, dados = {}) {
 
   const total = subtotal + taxaEntrega
   const trocoPara = dados.pagamento === 'dinheiro' ? Number(dados.trocoPara || 0) : 0
-
   if (!Number.isInteger(trocoPara) || trocoPara < 0) {
     throw new ApiError(400, 'Valor de troco inválido')
   }
@@ -222,6 +224,11 @@ export async function criarPedido(slug, dados = {}) {
     { new: false },
   )
 
+  // Auto-aceite ligado: o pedido já nasce "aceito" e o marco é gravado agora,
+  // senão o contador da etapa começaria a contar do zero errado.
+  const autoAceite = loja.fluxoPedidos?.autoAceite === true
+  const agora = new Date()
+
   const pedido = await Pedido.create({
     lojaId: loja._id,
     numero: lojaAntes.proximoNumero,
@@ -234,7 +241,9 @@ export async function criarPedido(slug, dados = {}) {
     itens,
     subtotal,
     total,
-    status: STATUS_PEDIDO.NOVO,
+    status: autoAceite ? STATUS_PEDIDO.ACEITO : STATUS_PEDIDO.NOVO,
+    aceitoAutomaticamente: autoAceite,
+    marcos: autoAceite ? { aceitoEm: agora } : {},
     pagamento: dados.pagamento,
     trocoPara,
     observacao: texto(dados.observacao),

@@ -21,6 +21,8 @@ export function pedidoPublico(pedido) {
     pagamento: pedido.pagamento,
     trocoPara: pedido.trocoPara,
     observacao: pedido.observacao,
+    // Só para a tela do cliente explicar: "a loja aceitou automaticamente".
+    aceitoAutomaticamente: Boolean(pedido.aceitoAutomaticamente),
     criadoEm: pedido.criadoEm,
   }
 }

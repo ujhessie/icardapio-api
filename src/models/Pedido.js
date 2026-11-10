@@ -63,6 +63,9 @@ const pedidoSchema = new mongoose.Schema(
       enum: Object.values(STATUS_PEDIDO),
       default: STATUS_PEDIDO.NOVO,
     },
+    // Pedido entrou já como "aceito" porque a loja ligou o auto-aceite. Fica
+    // gravado para o painel poder avisar "Pedido aceito automaticamente."
+    aceitoAutomaticamente: { type: Boolean, default: false },
     pagamento: {
       type: String,
       enum: FORMAS_PAGAMENTO,
