@@ -1,11 +1,15 @@
 import mongoose from 'mongoose'
-import { ORDEM_STATUS, STATUS_EM_ABERTO, STATUS_PEDIDO } from '../../config/constantes.js'
+import { ORDEM_STATUS, STATUS_EM_ABERTO, STATUS_PEDIDO, TIPOS_PEDIDO } from '../../config/constantes.js'
 import { ApiError } from '../../lib/ApiError.js'
 import { pedidoPublico } from '../../lib/pedidoPublico.js'
 import { emitirParaLoja, emitirParaPedido } from '../../lib/socket.js'
 import { Pedido } from '../../models/Pedido.js'
+import { Produto } from '../../models/Produto.js'
 
 const LIMITE_LISTA = 200
+
+// Mesmo teto da criação pública: 99 unidades por item já é exagero.
+const MAXIMO_POR_ITEM = 99
 
 // Pedido que já terminou pode sair da operação (arquivar/remover).
 // Pedido em andamento não: se sumir da fila, ninguém entrega.
@@ -51,6 +55,25 @@ function limparMarcosDepoisDe(pedido, statusDestino) {
 
 function ehVerdadeiro(valor) {
   return valor === true || valor === '1' || valor === 'true'
+}
+
+function texto(valor) {
+  return valor === undefined || valor === null ? '' : String(valor).trim()
+}
+
+function exigirTexto(valor, mensagem) {
+  const limpo = texto(valor)
+
+  if (!limpo) {
+    throw new ApiError(400, mensagem)
+  }
+
+  return limpo
+}
+
+// Preço é dinheiro: soma de float vira 52.899999999. Duas casas e pronto.
+function arredondar(valor) {
+  return Math.round(valor * 100) / 100
 }
 
 export async function listarPedidos(lojaId, filtros = {}) {
@@ -159,6 +182,128 @@ export async function arquivarPedido(lojaId, id, arquivado) {
   await pedido.save()
 
   emitirParaLoja(lojaId, 'pedido:atualizado', { pedido })
+
+  return pedido
+}
+
+/**
+ * Editar pedido em andamento.
+ *
+ * O lojista corrige o que o cliente digitou errado — nome, telefone, endereço,
+ * um item a mais ou a menos — sem cancelar e refazer. Refazer perderia o
+ * número, a posição na fila e o histórico do atendimento.
+ *
+ * Pedido finalizado não se edita: mudaria faturamento e relatório de algo que
+ * já aconteceu. Arquivado idem — primeiro sai do histórico, depois edita.
+ */
+export async function editarPedido(lojaId, id, dados = {}) {
+  const pedido = await buscarPedido(lojaId, id)
+
+  if (pedido.arquivado) {
+    throw new ApiError(400, 'Pedido arquivado não pode ser editado. Desarquive primeiro.')
+  }
+
+  if (STATUS_FINALIZADOS.includes(pedido.status)) {
+    throw new ApiError(400, 'Pedido já finalizado não pode ser editado')
+  }
+
+  if (!dados || typeof dados !== 'object') {
+    throw new ApiError(400, 'Dados inválidos')
+  }
+
+  if (dados.cliente) {
+    if (dados.cliente.nome !== undefined) {
+      pedido.cliente.nome = exigirTexto(dados.cliente.nome, 'Informe o nome do cliente')
+    }
+
+    if (dados.cliente.telefone !== undefined) {
+      pedido.cliente.telefone = exigirTexto(dados.cliente.telefone, 'Informe o telefone do cliente')
+    }
+  }
+
+  // Endereço só existe em delivery; balcão e mesa não têm para onde entregar.
+  if (dados.endereco && pedido.tipo === TIPOS_PEDIDO.DELIVERY) {
+    pedido.endereco.rua = exigirTexto(dados.endereco.rua, 'Informe a rua')
+    pedido.endereco.numero = exigirTexto(dados.endereco.numero, 'Informe o número')
+    pedido.endereco.complemento = texto(dados.endereco.complemento)
+    pedido.endereco.referencia = texto(dados.endereco.referencia)
+  }
+
+  if (dados.observacao !== undefined) {
+    pedido.observacao = texto(dados.observacao)
+  }
+
+  if (dados.itens !== undefined) {
+    if (!Array.isArray(dados.itens) || dados.itens.length === 0) {
+      throw new ApiError(400, 'O pedido precisa de pelo menos um item')
+    }
+
+    const daCompra = new Map(pedido.itens.map((item) => [String(item.produtoId), item]))
+    const vistos = new Set()
+    const itens = []
+    let subtotal = 0
+
+    for (const item of dados.itens) {
+      const quantidade = Number(item?.quantidade)
+
+      if (!item?.produtoId) {
+        throw new ApiError(400, 'Item sem produto')
+      }
+
+      if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > MAXIMO_POR_ITEM) {
+        throw new ApiError(400, 'Quantidade inválida')
+      }
+
+      // Produto indisponível hoje ainda pode ser mantido: o lojista está
+      // arrumando o pedido, não vendendo do cardápio.
+      const produto = await Produto.findOne({ _id: item?.produtoId, lojaId })
+
+      if (!produto) {
+        throw new ApiError(400, 'Um dos itens não existe mais no cardápio')
+      }
+
+      const chave = String(produto._id)
+
+      if (vistos.has(chave)) {
+        throw new ApiError(400, 'O mesmo item aparece duas vezes no pedido')
+      }
+
+      vistos.add(chave)
+
+      // Item que já estava no pedido guarda o preço da compra: corrigir a
+      // quantidade não pode reprecificar o que o cliente já viu e aceitou.
+      const daCompraAnterior = daCompra.get(chave)
+      const preco = daCompraAnterior?.precoUnitario ?? produto.preco
+
+      itens.push({
+        produtoId: produto._id,
+        nome: daCompraAnterior?.nome || produto.nome,
+        precoUnitario: preco,
+        quantidade,
+        observacao:
+          item.observacao !== undefined
+            ? texto(item.observacao)
+            : daCompraAnterior?.observacao || '',
+      })
+
+      subtotal += preco * quantidade
+    }
+
+    pedido.itens = itens
+    pedido.subtotal = arredondar(subtotal)
+    pedido.total = arredondar(subtotal + pedido.taxaEntrega)
+  }
+
+  // Editar item pode derrubar o total; o troco combinado não pode ficar menor.
+  if (pedido.pagamento === 'dinheiro' && pedido.trocoPara > 0 && pedido.trocoPara < pedido.total) {
+    throw new ApiError(400, 'O troco combinado ficou menor que o novo total do pedido')
+  }
+
+  await pedido.save()
+
+  emitirParaLoja(lojaId, 'pedido:atualizado', { pedido })
+  // A tela do cliente também acompanha: itens e total mudaram embaixo dele.
+  emitirParaPedido(pedido._id, 'pedido:status', { pedido: pedidoPublico(pedido) })
 
   return pedido
 }

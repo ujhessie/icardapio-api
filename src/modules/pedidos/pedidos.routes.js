@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { asyncHandler } from '../../lib/asyncHandler.js'
 import { autenticar } from '../../middlewares/autenticar.js'
 import { exigirLoja } from '../../middlewares/exigirLoja.js'
-import { atualizarStatus, arquivar, detalhar, estatisticas, listar, remover, resumo } from './pedidos.controller.js'
+import { atualizarStatus, arquivar, detalhar, editar, estatisticas, listar, remover, resumo } from './pedidos.controller.js'
 
 export const rotasPedidos = Router()
 
@@ -12,6 +12,7 @@ rotasPedidos.get('/resumo', asyncHandler(resumo))
 rotasPedidos.get('/estatisticas', asyncHandler(estatisticas))
 rotasPedidos.get('/', asyncHandler(listar))
 rotasPedidos.get('/:id', asyncHandler(detalhar))
+rotasPedidos.patch('/:id', asyncHandler(editar))
 rotasPedidos.patch('/:id/status', asyncHandler(atualizarStatus))
 rotasPedidos.patch('/:id/arquivar', asyncHandler(arquivar))
 rotasPedidos.delete('/:id', asyncHandler(remover))
