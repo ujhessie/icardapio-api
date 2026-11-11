@@ -27,7 +27,9 @@ const pedidoSchema = new mongoose.Schema(
     numero: { type: Number, required: true, min: 1 },
     cliente: {
       nome: { type: String, required: [true, 'Informe seu nome'], trim: true },
-      telefone: { type: String, required: [true, 'Informe seu telefone'], trim: true },
+      // Opcional: pedido lançado no balcão nem sempre tem telefone. O pedido
+      // público continua exigindo (a validação dele fica no service).
+      telefone: { type: String, default: '', trim: true },
     },
     tipo: {
       type: String,

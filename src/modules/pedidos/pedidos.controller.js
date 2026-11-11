@@ -1,6 +1,7 @@
 import {
   arquivarPedido,
   buscarPedido,
+  criarPedidoPainel,
   editarPedido,
   estatisticasPedidos,
   listarPedidos,
@@ -30,6 +31,11 @@ export async function atualizarStatus(req, res) {
 export async function editar(req, res) {
   const pedido = await editarPedido(req.usuario.lojaId, req.params.id, req.body)
   res.json({ pedido })
+}
+
+export async function criar(req, res) {
+  const pedido = await criarPedidoPainel(req.usuario.lojaId, req.body)
+  res.status(201).json({ pedido })
 }
 
 export async function resumo(req, res) {

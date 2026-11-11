@@ -1,8 +1,16 @@
 import mongoose from 'mongoose'
-import { ORDEM_STATUS, STATUS_EM_ABERTO, STATUS_PEDIDO, TIPOS_PEDIDO } from '../../config/constantes.js'
+import {
+  FORMAS_PAGAMENTO,
+  ORDEM_STATUS,
+  STATUS_EM_ABERTO,
+  STATUS_PEDIDO,
+  TIPOS_PEDIDO,
+} from '../../config/constantes.js'
 import { ApiError } from '../../lib/ApiError.js'
 import { pedidoPublico } from '../../lib/pedidoPublico.js'
 import { emitirParaLoja, emitirParaPedido } from '../../lib/socket.js'
+import { Bairro } from '../../models/Bairro.js'
+import { Loja } from '../../models/Loja.js'
 import { Pedido } from '../../models/Pedido.js'
 import { Produto } from '../../models/Produto.js'
 
@@ -304,6 +312,180 @@ export async function editarPedido(lojaId, id, dados = {}) {
   emitirParaLoja(lojaId, 'pedido:atualizado', { pedido })
   // A tela do cliente também acompanha: itens e total mudaram embaixo dele.
   emitirParaPedido(pedido._id, 'pedido:status', { pedido: pedidoPublico(pedido) })
+
+  return pedido
+}
+
+/**
+ * Criar pedido pelo painel.
+ *
+ * É o pedido que não passou pelo cardápio: cliente ligou, pediu na mesa ou
+ * apareceu no balcão. O lojista lança e ele entra na mesma fila dos outros —
+ * mesmo número, mesmo quadro, mesmo histórico.
+ *
+ * Diferente do pedido público: mesa é permitida, item indisponível pode ser
+ * lançado (o lojista sabe o que tem) e o telefone é opcional.
+ */
+export async function criarPedidoPainel(lojaId, dados = {}) {
+  const loja = await Loja.findById(lojaId)
+
+  if (!loja) {
+    throw new ApiError(404, 'Loja não encontrada')
+  }
+
+  if (!Object.values(TIPOS_PEDIDO).includes(dados.tipo)) {
+    throw new ApiError(400, 'Tipo de pedido inválido')
+  }
+
+  if (!FORMAS_PAGAMENTO.includes(dados.pagamento)) {
+    throw new ApiError(400, 'Forma de pagamento inválida')
+  }
+
+  if (!Array.isArray(dados.itens) || dados.itens.length === 0) {
+    throw new ApiError(400, 'Adicione pelo menos um item')
+  }
+
+  const cliente = {
+    nome: exigirTexto(dados.cliente?.nome, 'Informe o nome do cliente'),
+    // Balcão e mesa nem sempre têm telefone. Delivery tem, mas quem atende
+    // pode esquecer de perguntar — melhor não travar o pedido por isso.
+    telefone: texto(dados.cliente?.telefone),
+  }
+
+  const itens = []
+  const vistos = new Set()
+  let subtotal = 0
+
+  for (const item of dados.itens) {
+    const quantidade = Number(item?.quantidade)
+
+    if (!item?.produtoId) {
+      throw new ApiError(400, 'Item sem produto')
+    }
+
+    if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > MAXIMO_POR_ITEM) {
+      throw new ApiError(400, 'Quantidade inválida')
+    }
+
+    const produto = await Produto.findOne({ _id: item.produtoId, lojaId })
+
+    if (!produto) {
+      throw new ApiError(400, 'Um dos itens não existe no cardápio')
+    }
+
+    const chave = String(produto._id)
+
+    if (vistos.has(chave)) {
+      throw new ApiError(400, 'O mesmo item aparece duas vezes no pedido')
+    }
+
+    vistos.add(chave)
+
+    itens.push({
+      produtoId: produto._id,
+      nome: produto.nome,
+      precoUnitario: produto.preco,
+      quantidade,
+      observacao: texto(item.observacao),
+    })
+
+    subtotal += produto.preco * quantidade
+  }
+
+  let endereco = { rua: '', numero: '', complemento: '', referencia: '' }
+  let bairroId = null
+  let bairroNome = ''
+  let taxaEntrega = 0
+  let mesa = null
+
+  if (dados.tipo === TIPOS_PEDIDO.DELIVERY) {
+    const bairro = await Bairro.findOne({
+      _id: dados.bairroId,
+      lojaId,
+      ativo: true,
+    })
+
+    if (!bairro) {
+      throw new ApiError(400, 'Escolha um bairro para entrega')
+    }
+
+    endereco = {
+      rua: exigirTexto(dados.endereco?.rua, 'Informe a rua'),
+      numero: exigirTexto(dados.endereco?.numero, 'Informe o número'),
+      complemento: texto(dados.endereco?.complemento),
+      referencia: texto(dados.endereco?.referencia),
+    }
+
+    bairroId = bairro._id
+    bairroNome = bairro.nome
+    taxaEntrega = bairro.taxaEntrega
+  }
+
+  if (dados.tipo === TIPOS_PEDIDO.MESA) {
+    mesa = Number(dados.mesa)
+
+    if (!Number.isInteger(mesa) || mesa < 1 || mesa > 999) {
+      throw new ApiError(400, 'Informe o número da mesa')
+    }
+  }
+
+  subtotal = arredondar(subtotal)
+
+  const total = arredondar(subtotal + taxaEntrega)
+  const trocoPara = dados.pagamento === 'dinheiro' ? Number(dados.trocoPara || 0) : 0
+
+  if (!Number.isInteger(trocoPara) || trocoPara < 0) {
+    throw new ApiError(400, 'Valor de troco inválido')
+  }
+
+  if (trocoPara > 0 && trocoPara < total) {
+    throw new ApiError(400, 'O valor para troco é menor que o total do pedido')
+  }
+
+  // Mesmo contador atômico do pedido público: dois pedidos no mesmo segundo
+  // não podem receber o mesmo número.
+  if (!loja.proximoNumero) {
+    await Loja.updateOne(
+      {
+        _id: loja._id,
+        $or: [{ proximoNumero: { $exists: false } }, { proximoNumero: { $lt: 1 } }],
+      },
+      { $set: { proximoNumero: 1 } },
+    )
+  }
+
+  const lojaAntes = await Loja.findOneAndUpdate(
+    { _id: loja._id },
+    { $inc: { proximoNumero: 1 } },
+    { new: false },
+  )
+
+  // Auto-aceite vale também para o pedido lançado pelo painel: a regra é da
+  // loja, não da origem do pedido.
+  const autoAceite = loja.fluxoPedidos?.autoAceite === true
+
+  const pedido = await Pedido.create({
+    lojaId: loja._id,
+    numero: lojaAntes.proximoNumero,
+    cliente,
+    tipo: dados.tipo,
+    mesa,
+    endereco,
+    bairroId,
+    bairroNome,
+    taxaEntrega,
+    itens,
+    subtotal,
+    total,
+    status: autoAceite ? STATUS_PEDIDO.ACEITO : STATUS_PEDIDO.NOVO,
+    aceitoAutomaticamente: autoAceite,
+    marcos: autoAceite ? { aceitoEm: new Date() } : {},
+    pagamento: dados.pagamento,
+    trocoPara,
+    observacao: texto(dados.observacao),
+  })
+
+  emitirParaLoja(lojaId, 'pedido:novo', { pedido: pedidoPublico(pedido) })
 
   return pedido
 }
