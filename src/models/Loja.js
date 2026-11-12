@@ -65,6 +65,9 @@ const fluxoPedidosSchema = new mongoose.Schema(
       enum: Object.values(MODOS_BALCAO),
       default: FLUXO_PADRAO.modoBalcao,
     },
+    // Só vale no modo "link": é o código que vai no endereço exclusivo do
+    // balcão. Fica guardado para o dono poder reenviar o mesmo link.
+    codigoBalcao: { type: String, default: '', trim: true },
   },
   { _id: false },
 )

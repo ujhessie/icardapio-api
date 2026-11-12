@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { ApiError } from '../../lib/ApiError.js'
 import { normalizarDatasEspeciais, normalizarHorarios } from '../../lib/horario.js'
 import { criptografarSenha } from '../../lib/senha.js'
@@ -102,9 +103,35 @@ function normalizarFluxo(dados, atuais) {
     }
 
     resultado.modoBalcao = dados.modoBalcao
+
+    // No modo link o primeiro código é gerado aqui; depois ele é reaproveitado,
+    // para o lojista não precisar reenviar um endereço novo ao cliente.
+    if (
+      dados.modoBalcao === MODOS_BALCAO.LINK &&
+      !String(resultado.codigoBalcao || '').trim()
+    ) {
+      resultado.codigoBalcao = gerarCodigoBalcao()
+    }
   }
 
   return resultado
+}
+
+/*
+ * Código do link exclusivo do balcão.
+ *
+ * Alfabeto sem letras e números que se confundem lendo (0/O, 1/I): esse código
+ * vai ser copiado, colado no WhatsApp e às vezes digitado à mão.
+ */
+const ALFABETO_DO_BALCAO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
+function gerarCodigoBalcao() {
+  const bytes = randomBytes(6)
+  let codigo = ''
+
+  for (const byte of bytes) codigo += ALFABETO_DO_BALCAO[byte % ALFABETO_DO_BALCAO.length]
+
+  return codigo
 }
 
 // URLs que o sistema já usa (ou pode usar) e não podem virar nome de loja.

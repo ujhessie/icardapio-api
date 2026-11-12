@@ -6,7 +6,7 @@ import {
 } from './publico.service.js'
 
 export async function cardapio(req, res) {
-  res.json(await montarCardapio(req.params.slug))
+  res.json(await montarCardapio(req.params.slug, req.query.balcao))
 }
 
 export async function criar(req, res) {

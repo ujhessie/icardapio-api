@@ -1,5 +1,6 @@
 import {
   FORMAS_PAGAMENTO,
+  MODOS_BALCAO,
   SITUACOES_LOJA,
   STATUS_PEDIDO,
   TIPOS_DO_CLIENTE,
@@ -51,7 +52,29 @@ async function buscarLojaAtiva(slug) {
   return loja
 }
 
-export async function montarCardapio(slug) {
+/*
+ * O balcão está liberado?
+ *
+ * - `cliente`: sempre. O cliente pede e retira.
+ * - `link`: só com o código do endereço exclusivo que o lojista mandou.
+ * - `off`: nunca.
+ *
+ * O código é comparado sem diferenciar maiúscula de minúscula — ele é copiado
+ * de um link e colado à mão no WhatsApp.
+ */
+function balcaoLiberado(loja, codigo) {
+  const modo = loja.fluxoPedidos?.modoBalcao || MODOS_BALCAO.CLIENTE
+
+  if (modo === MODOS_BALCAO.CLIENTE) return true
+  if (modo !== MODOS_BALCAO.LINK) return false
+
+  const esperado = texto(loja.fluxoPedidos?.codigoBalcao).toUpperCase()
+  const enviado = texto(codigo).toUpperCase()
+
+  return Boolean(esperado) && esperado === enviado
+}
+
+export async function montarCardapio(slug, codigoBalcao) {
   const loja = await buscarLojaAtiva(slug)
 
   const [categorias, produtos, bairros] = await Promise.all([
@@ -106,6 +129,8 @@ export async function montarCardapio(slug) {
       taxaEntrega: bairro.taxaEntrega,
       tempoEstimado: bairro.tempoEstimado,
     })),
+    // O checkout esconde "Retirar na loja" quando falso.
+    balcaoLiberado: balcaoLiberado(loja, codigoBalcao),
   }
 }
 
@@ -122,6 +147,18 @@ export async function criarPedido(slug, dados = {}) {
 
   if (!TIPOS_DO_CLIENTE.includes(dados.tipo)) {
     throw new ApiError(400, 'Tipo de pedido inválido')
+  }
+
+  // Balcão é o único tipo que a loja pode fechar sem fechar a loja inteira.
+  if (dados.tipo === TIPOS_PEDIDO.BALCAO && !balcaoLiberado(loja, dados.codigoBalcao)) {
+    const modo = loja.fluxoPedidos?.modoBalcao || MODOS_BALCAO.CLIENTE
+
+    throw new ApiError(
+      400,
+      modo === MODOS_BALCAO.LINK
+        ? 'Este link de retirada não vale mais. Peça o link atualizado para a loja.'
+        : 'Esta loja não está aceitando pedidos para retirar no balcão agora.',
+    )
   }
 
   if (!FORMAS_PAGAMENTO.includes(dados.pagamento)) {
