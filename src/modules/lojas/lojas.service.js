@@ -5,6 +5,7 @@ import { criptografarSenha } from '../../lib/senha.js'
 import { gerarSlug } from '../../lib/slug.js'
 import {
   FLUXO_PADRAO,
+  LIMITE_REDES,
   MODOS_BALCAO,
   ORDEM_STATUS,
   PAPEIS,
@@ -12,6 +13,7 @@ import {
   TEMPO_MAX,
   TEMPO_MIN,
   TEMPOS_PADRAO,
+  TIPOS_REDE,
 } from '../../config/constantes.js'
 import { Loja } from '../../models/Loja.js'
 import { Usuario } from '../../models/Usuario.js'
@@ -28,6 +30,8 @@ const CAMPOS_EDITAVEIS = [
   'endereco',
   'horarios',
   'datasEspeciais',
+  'redesSociais',
+  'mostrarHorarios',
   'tempos',
   'fluxoPedidos',
 ]
@@ -140,6 +144,75 @@ function gerarCodigoBalcao() {
   for (const byte of bytes) codigo += ALFABETO_DO_BALCAO[byte % ALFABETO_DO_BALCAO.length]
 
   return codigo
+}
+
+/*
+ * Links de rede social.
+ *
+ * Quem digita "instagram.com/loja" não está errado — só faltou o protocolo.
+ * Aqui ele é completado. O que não for endereço de verdade é recusado com o
+ * valor na mensagem, para o lojista saber qual linha corrigir.
+ */
+function prepararUrlRede(valor) {
+  const limpo = String(valor || '').trim()
+
+  if (!limpo) return ''
+
+  const comProtocolo = /^https?:\/\//i.test(limpo) ? limpo : `https://${limpo}`
+
+  try {
+    const url = new URL(comProtocolo)
+
+    // "https://instagram" passa no URL, mas não leva a lugar nenhum.
+    if (!url.hostname.includes('.')) throw new Error('sem domínio')
+
+    return url.toString()
+  } catch {
+    throw new ApiError(
+      400,
+      `Link inválido: "${limpo}". Use o endereço completo, como instagram.com/sualoja.`,
+    )
+  }
+}
+
+function normalizarRedes(lista) {
+  if (!Array.isArray(lista)) {
+    throw new ApiError(400, 'Lista de redes inválida')
+  }
+
+  const redes = []
+
+  for (const item of lista) {
+    if (!item || typeof item !== 'object') continue
+
+    const url = prepararUrlRede(item.url)
+
+    // Linha vazia é o campo recém-adicionado que ainda não foi preenchido:
+    // ignora em vez de gravar um link quebrado no rodapé.
+    if (!url) continue
+
+    redes.push({
+      tipo: TIPOS_REDE.includes(item.tipo) ? item.tipo : 'outro',
+      url,
+    })
+  }
+
+  if (redes.length > LIMITE_REDES) {
+    throw new ApiError(400, `Cadastre no máximo ${LIMITE_REDES} redes sociais`)
+  }
+
+  return redes
+}
+
+/*
+ * Booleano vindo de formulário.
+ *
+ * Checkbox novo manda true/false de verdade, mas campo antigo pode mandar
+ * "false" ou 0 em texto — e Boolean("false") é true, que esconderia o horário
+ * ao contrário do que o lojista pediu.
+ */
+function normalizarBooleano(valor) {
+  return !(valor === false || valor === 'false' || valor === 0 || valor === '0')
 }
 
 // URLs que o sistema já usa (ou pode usar) e não podem virar nome de loja.
@@ -276,6 +349,10 @@ function aplicarCampos(loja, dados) {
       loja.fluxoPedidos = normalizarFluxo(dados.fluxoPedidos, loja.fluxoPedidos?.toObject())
     } else if (campo === 'datasEspeciais') {
       loja.datasEspeciais = normalizarDatasEspeciais(dados.datasEspeciais)
+    } else if (campo === 'redesSociais') {
+      loja.redesSociais = normalizarRedes(dados.redesSociais)
+    } else if (campo === 'mostrarHorarios') {
+      loja.mostrarHorarios = normalizarBooleano(dados.mostrarHorarios)
     } else {
       loja[campo] = dados[campo]
     }

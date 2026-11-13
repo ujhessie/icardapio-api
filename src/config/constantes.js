@@ -54,6 +54,22 @@ export const FLUXO_PADRAO = {
   modoBalcao: MODOS_BALCAO.CLIENTE,
 }
 
+// Redes que o lojista pode cadastrar no cardápio. A lista é livre: ele adiciona
+// só as que usa. "outro" existe para quem tem link que não cai em nenhuma das
+// conhecidas — melhor um link com rótulo genérico do que o campo ser inútil.
+export const TIPOS_REDE = [
+  'instagram',
+  'facebook',
+  'tiktok',
+  'youtube',
+  'whatsapp',
+  'site',
+  'outro',
+]
+
+// Teto de redes por loja: rodapé com 15 ícones vira paredão e ninguém clica.
+export const LIMITE_REDES = 6
+
 // Situação da loja, controlada pelo superadmin.
 export const SITUACOES_LOJA = {
   PENDENTE: 'pendente',

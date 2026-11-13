@@ -33,6 +33,19 @@ const dataEspecialSchema = new mongoose.Schema(
   { _id: false },
 )
 
+/*
+ * Rede social do rodapé do cardápio. `tipo` decide o ícone e o rótulo;
+ * `url` é o link que o cliente abre. Guardar os dois permite trocar o ícone
+ * depois sem o lojista reeditar a lista.
+ */
+const redeSocialSchema = new mongoose.Schema(
+  {
+    tipo: { type: String, default: 'outro' },
+    url: { type: String, trim: true, default: '' },
+  },
+  { _id: false },
+)
+
 const temposSchema = new mongoose.Schema(
   {
     // Minutos que o pedido pode ficar em cada etapa antes de virar alerta.
@@ -104,6 +117,10 @@ const lojaSchema = new mongoose.Schema(
     // `aberta` (protege as lojas que existiam antes dos horários).
     horarios: { type: [horarioSchema], default: [] },
     datasEspeciais: { type: [dataEspecialSchema], default: [] },
+    // Rodapé do cardápio: redes cadastradas pelo lojista e a escolha de mostrar
+    // a grade de horários. Endereço (acima) e telefone completam o rodapé.
+    redesSociais: { type: [redeSocialSchema], default: [] },
+    mostrarHorarios: { type: Boolean, default: true },
     // Tempo alvo de cada etapa (minutos) — o lojista edita em Configurações.
     tempos: { type: temposSchema, default: () => ({ ...TEMPOS_PADRAO }) },
     // Quais etapas a loja mostra, se aceita pedido sozinho e como é o balcão.

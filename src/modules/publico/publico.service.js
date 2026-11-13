@@ -103,6 +103,10 @@ export async function montarCardapio(slug, codigoBalcao) {
       horarios: loja.horarios,
       datasEspeciais: loja.datasEspeciais,
       endereco: loja.endereco,
+      // Rodapé: redes que a loja cadastrou e se ela quer mostrar a grade de
+      // horários (o endereço e o telefone sempre vão).
+      redesSociais: loja.redesSociais,
+      mostrarHorarios: loja.mostrarHorarios !== false,
       // A tela de acompanhamento desenha os mesmos passos que o painel: se a
       // loja esconde uma etapa, o cliente não vê essa etapa.
       fluxoPedidos: loja.fluxoPedidos,
