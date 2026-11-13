@@ -114,6 +114,14 @@ function normalizarFluxo(dados, atuais) {
     }
   }
 
+  // "Gerar novo link": troca o código na hora e derruba o endereço antigo.
+  // A flag vale para este salvamento só — ela não é guardada na loja e não
+  // chega ao banco. Fora do modo link o código fica guardado para quando a
+  // loja ligar o link de novo, então girar aqui não atrapalha ninguém.
+  if (dados.renovarCodigoBalcao) {
+    resultado.codigoBalcao = gerarCodigoBalcao()
+  }
+
   return resultado
 }
 
