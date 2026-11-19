@@ -32,7 +32,10 @@ const RECEITAS = {
   },
   capa: {
     pasta: 'capa',
-    transformacao: 'c_fill,g_auto,w_1600,h_700,q_auto:good,f_auto',
+    // c_limit preserva a arte inteira: muita loja sobe banner com o nome
+    // escrito dentro da imagem, e o c_fill (que recortava em 1600x700) comia
+    // justamente o nome. Só reduz quando passa de 1600px de largura.
+    transformacao: 'c_limit,w_1600,q_auto:good,f_auto',
   },
 }
 

@@ -95,6 +95,8 @@ export async function montarCardapio(slug, codigoBalcao) {
       telefone: loja.telefone,
       logo: loja.logo,
       capa: loja.capa,
+      // Recado da loja para o topo do cardápio. Vazio = sem faixa.
+      aviso: loja.aviso || '',
       corPrimaria: loja.corPrimaria,
       // `aberta` é o interruptor do dono; `abertoAgora` já considera a grade.
       aberta: loja.aberta,

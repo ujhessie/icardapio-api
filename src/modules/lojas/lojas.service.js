@@ -25,6 +25,7 @@ const CAMPOS_EDITAVEIS = [
   'telefone',
   'logo',
   'capa',
+  'aviso',
   'corPrimaria',
   'aberta',
   'endereco',
@@ -351,6 +352,10 @@ function aplicarCampos(loja, dados) {
       loja.datasEspeciais = normalizarDatasEspeciais(dados.datasEspeciais)
     } else if (campo === 'redesSociais') {
       loja.redesSociais = normalizarRedes(dados.redesSociais)
+    } else if (campo === 'aviso') {
+      // Recorte no serviço, e não só no schema: o cardápio precisa do texto
+      // curto, e um aviso de 2 KB estouraria a faixa.
+      loja.aviso = String(dados.aviso ?? '').trim().slice(0, 160)
     } else if (campo === 'mostrarHorarios') {
       loja.mostrarHorarios = normalizarBooleano(dados.mostrarHorarios)
     } else {
