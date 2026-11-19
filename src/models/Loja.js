@@ -110,7 +110,11 @@ const lojaSchema = new mongoose.Schema(
     logo: { type: String, default: '' },
     // Foto do topo do cardápio (URL). Vazia = topo com a cor da loja, sem
     // buraco na tela: loja antiga continua bonita sem ter foto.
+    // Espelha sempre a primeira arte de `capas` — é o que loja antiga lê.
     capa: { type: String, default: '' },
+    // Artes do carrossel do topo, na ordem. Uma só = banner parado; duas ou
+    // mais = o cardápio mostra os tracinhos e troca sozinho.
+    capas: { type: [String], default: [] },
     // Recado curto no topo do cardápio ("hoje não abrimos", "feriado",
     // "pedidos só até 22h"). Vazio = a faixa de aviso não aparece.
     aviso: { type: String, default: '', trim: true, maxlength: 160 },

@@ -5,6 +5,7 @@ import { criptografarSenha } from '../../lib/senha.js'
 import { gerarSlug } from '../../lib/slug.js'
 import {
   FLUXO_PADRAO,
+  LIMITE_CAPAS,
   LIMITE_REDES,
   MODOS_BALCAO,
   ORDEM_STATUS,
@@ -25,6 +26,7 @@ const CAMPOS_EDITAVEIS = [
   'telefone',
   'logo',
   'capa',
+  'capas',
   'aviso',
   'corPrimaria',
   'aberta',
@@ -206,6 +208,35 @@ function normalizarRedes(lista) {
 }
 
 /*
+ * Artes do carrossel do topo.
+ *
+ * URL repetida é o lojista subindo a mesma imagem duas vezes: some na hora em
+ * vez de aparecer dois slides iguais. Passar do teto é erro de quem chamou, e
+ * não aviso silencioso — some banner sem explicação é pior que o erro.
+ */
+function normalizarCapas(lista) {
+  if (!Array.isArray(lista)) {
+    throw new ApiError(400, 'Lista de banners inválida')
+  }
+
+  const capas = []
+
+  for (const item of lista) {
+    const url = String(item ?? '').trim()
+
+    if (!url || capas.includes(url)) continue
+
+    capas.push(url)
+  }
+
+  if (capas.length > LIMITE_CAPAS) {
+    throw new ApiError(400, `O carrossel aceita no máximo ${LIMITE_CAPAS} banners`)
+  }
+
+  return capas
+}
+
+/*
  * Booleano vindo de formulário.
  *
  * Checkbox novo manda true/false de verdade, mas campo antigo pode mandar
@@ -356,6 +387,18 @@ function aplicarCampos(loja, dados) {
       // Recorte no serviço, e não só no schema: o cardápio precisa do texto
       // curto, e um aviso de 2 KB estouraria a faixa.
       loja.aviso = String(dados.aviso ?? '').trim().slice(0, 160)
+    } else if (campo === 'capa') {
+      // Quem salva uma arte só (tela antiga, script) continua com um banner:
+      // a lista acompanha em vez de guardar uma URL que ninguém mostra.
+      loja.capa = String(dados.capa ?? '').trim()
+
+      if (dados.capas === undefined) {
+        loja.capas = loja.capa ? [loja.capa] : []
+      }
+    } else if (campo === 'capas') {
+      loja.capas = normalizarCapas(dados.capas)
+      // `capa` é o atalho de loja antiga: espelha a primeira arte.
+      loja.capa = loja.capas[0] || ''
     } else if (campo === 'mostrarHorarios') {
       loja.mostrarHorarios = normalizarBooleano(dados.mostrarHorarios)
     } else {

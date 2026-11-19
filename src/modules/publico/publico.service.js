@@ -95,6 +95,9 @@ export async function montarCardapio(slug, codigoBalcao) {
       telefone: loja.telefone,
       logo: loja.logo,
       capa: loja.capa,
+      // Carrossel do topo, já resolvido: loja antiga (só `capa`) entrega uma
+      // arte na lista, e o cardápio não precisa saber de duas épocas.
+      capas: loja.capas?.length > 0 ? loja.capas : loja.capa ? [loja.capa] : [],
       // Recado da loja para o topo do cardápio. Vazio = sem faixa.
       aviso: loja.aviso || '',
       corPrimaria: loja.corPrimaria,

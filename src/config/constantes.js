@@ -70,6 +70,10 @@ export const TIPOS_REDE = [
 // Teto de redes por loja: rodapé com 15 ícones vira paredão e ninguém clica.
 export const LIMITE_REDES = 6
 
+// Teto de artes no carrossel do topo. Passar de 5 vira apresentação de slides
+// e o cliente passa reto pelo cardápio.
+export const LIMITE_CAPAS = 5
+
 // Situação da loja, controlada pelo superadmin.
 export const SITUACOES_LOJA = {
   PENDENTE: 'pendente',
