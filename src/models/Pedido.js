@@ -96,5 +96,7 @@ const pedidoSchema = new mongoose.Schema(
 pedidoSchema.index({ lojaId: 1, numero: 1 }, { unique: true })
 pedidoSchema.index({ lojaId: 1, status: 1, criadoEm: -1 })
 pedidoSchema.index({ lojaId: 1, arquivado: 1, criadoEm: -1 })
+// Histórico: a lista é sempre da loja, do mais recente para o mais antigo.
+pedidoSchema.index({ lojaId: 1, criadoEm: -1 })
 
 export const Pedido = mongoose.model('Pedido', pedidoSchema)

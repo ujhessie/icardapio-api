@@ -14,7 +14,13 @@ import { Loja } from '../../models/Loja.js'
 import { Pedido } from '../../models/Pedido.js'
 import { Produto } from '../../models/Produto.js'
 
+// O quadro carrega o dia inteiro de uma vez; o histórico pagina.
 const LIMITE_LISTA = 200
+const LIMITE_PAGINA = 30
+const LIMITE_MAXIMO = 100
+
+// Períodos do histórico. "tudo" é a ausência de filtro, não um número.
+const DIAS_DO_PERIODO = { hoje: 1, 7: 7, 30: 30 }
 
 // Mesmo teto da criação pública: 99 unidades por item já é exagero.
 const MAXIMO_POR_ITEM = 99
@@ -27,6 +33,77 @@ function inicioDoDia() {
   const inicio = new Date()
   inicio.setHours(0, 0, 0, 0)
   return inicio
+}
+
+// Começo do dia de N dias atrás, contando hoje. 7 dias = hoje + os 6 anteriores.
+function inicioDeDiasAtras(dias) {
+  const inicio = inicioDoDia()
+  inicio.setDate(inicio.getDate() - (dias - 1))
+  return inicio
+}
+
+function escaparRegex(valor) {
+  return valor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+// Vogal e consoante com acento aceitam as duas formas: "jose" acha "José" e
+// "josé" também. Sem isso a busca do painel erraria o nome mais comum do país.
+const LETRAS_ACENTUADAS = {
+  a: 'aáàâãä',
+  c: 'cç',
+  e: 'eéèêë',
+  i: 'iíìîï',
+  n: 'nñ',
+  o: 'oóòôõö',
+  u: 'uúùûü',
+  y: 'yýÿ',
+}
+
+function regexDeNome(termo) {
+  const base = termo
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+
+  const padrao = Array.from(base)
+    .map((letra) => {
+      const variantes = LETRAS_ACENTUADAS[letra]
+
+      // A classe precisa dos colchetes: sem eles o padrão viraria uma
+      // sequência literal de letras ("eéèêë") em vez de "qualquer uma destas".
+      return variantes ? `[${variantes}]` : escaparRegex(letra)
+    })
+    .join('')
+
+  return new RegExp(padrao, 'i')
+}
+
+/*
+ * Telefone é gravado como o lojista digitou — "(11) 98765-4321" —, então a
+ * busca por "98765" precisa ignorar a máscara no meio dos dígitos.
+ */
+function regexDeTelefone(digitos) {
+  return new RegExp(digitos.split('').map(escaparRegex).join('[^0-9]*'))
+}
+
+/*
+ * Busca livre do histórico: nome do cliente, telefone e número do pedido.
+ * Devolve um $or, ou null quando o campo está vazio.
+ */
+function filtroDeBusca(termo) {
+  const limpo = texto(termo).replace(/^#/, '').trim()
+
+  if (!limpo) return null
+
+  const digitos = limpo.replace(/\D/g, '')
+  const clausulas = [{ 'cliente.nome': regexDeNome(limpo) }]
+
+  if (digitos.length >= 2) {
+    if (/^\d+$/.test(limpo)) clausulas.push({ numero: Number(limpo) })
+    clausulas.push({ 'cliente.telefone': regexDeTelefone(digitos) })
+  }
+
+  return { $or: clausulas }
 }
 
 // Em que "marco" do pedido cada status entra. Cancelado não tem marco: não é
@@ -84,35 +161,88 @@ function arredondar(valor) {
   return Math.round(valor * 100) / 100
 }
 
+/*
+ * Lista de pedidos da loja, com dois modos:
+ *
+ * - Quadro (padrão): fila viva, mais antigo primeiro, `hoje` ligado.
+ * - Histórico (`tudo=1`): tudo o que a loja já recebeu, mais recente
+ *   primeiro, com busca, período e paginação.
+ *
+ * A consulta é montada por uma lista de condições que caem num $and. Antes o
+ * `hoje` e a busca usariam a mesma chave $or e uma apagaria a outra.
+ */
 export async function listarPedidos(lojaId, filtros = {}) {
+  const tudo = ehVerdadeiro(filtros.tudo)
   const consulta = { lojaId }
+  const condicoes = []
 
   // Arquivado é histórico: só volta para a tela quando ela pede.
   // $ne: true também pega os pedidos antigos, que não têm o campo.
-  consulta.arquivado = ehVerdadeiro(filtros.arquivados) ? true : { $ne: true }
+  // No histórico (`tudo`) a etiqueta é ignorada: pedido arquivado é pedido
+  // que a loja já fez, e ele tem que aparecer na busca.
+  if (!tudo) {
+    consulta.arquivado = ehVerdadeiro(filtros.arquivados) ? true : { $ne: true }
+  }
 
   if (filtros.status) {
-    if (!Object.values(STATUS_PEDIDO).includes(filtros.status)) {
-      throw new ApiError(400, 'Status inválido')
-    }
+    // Atalho do histórico: "em andamento" é tudo que ainda não terminou.
+    if (filtros.status === 'em_andamento') {
+      condicoes.push({ status: { $in: STATUS_EM_ABERTO } })
+    } else {
+      if (!Object.values(STATUS_PEDIDO).includes(filtros.status)) {
+        throw new ApiError(400, 'Status inválido')
+      }
 
-    consulta.status = filtros.status
+      condicoes.push({ status: filtros.status })
+    }
   }
 
   if (ehVerdadeiro(filtros.hoje)) {
     // Pedido em aberto é sempre do "agora". Sem isso, pedido que ficou de
     // ontem conta no resumo mas some do quadro — e some pra sempre.
-    consulta.$or = [
-      { criadoEm: { $gte: inicioDoDia() } },
-      { status: { $in: STATUS_EM_ABERTO } },
-    ]
+    condicoes.push({
+      $or: [{ criadoEm: { $gte: inicioDoDia() } }, { status: { $in: STATUS_EM_ABERTO } }],
+    })
   }
 
-  // Fila: mais antigo primeiro, porque quem chegou antes é prioridade.
-  // Histórico (arquivados) é o contrário — ali o que interessa é o mais recente.
-  const ordem = ehVerdadeiro(filtros.arquivados) ? -1 : 1
+  const periodo = texto(filtros.periodo)
 
-  return Pedido.find(consulta).sort({ criadoEm: ordem }).limit(LIMITE_LISTA)
+  if (periodo && periodo !== 'tudo') {
+    const dias = DIAS_DO_PERIODO[periodo]
+
+    if (!dias) {
+      throw new ApiError(400, 'Período inválido. Use hoje, 7, 30 ou tudo.')
+    }
+
+    condicoes.push({ criadoEm: { $gte: inicioDeDiasAtras(dias) } })
+  }
+
+  const busca = filtroDeBusca(filtros.busca)
+
+  if (busca) condicoes.push(busca)
+
+  if (condicoes.length) consulta.$and = condicoes
+
+  // Fila: mais antigo primeiro, porque quem chegou antes é prioridade.
+  // Histórico é o contrário — ali o que interessa é o mais recente.
+  const ordem = tudo || ehVerdadeiro(filtros.arquivados) ? -1 : 1
+
+  // Sem `limite` o quadro recebe o dia inteiro de uma vez; o histórico, uma
+  // página por vez.
+  const pagina = Math.max(1, Number(filtros.pagina) || 1)
+  const pedidoDeLimite = Number(filtros.limite) || 0
+  const padrao = tudo ? LIMITE_PAGINA : LIMITE_LISTA
+  const limite = pedidoDeLimite > 0 ? Math.min(pedidoDeLimite, LIMITE_MAXIMO) : padrao
+
+  const [pedidos, total] = await Promise.all([
+    Pedido.find(consulta)
+      .sort({ criadoEm: ordem })
+      .skip((pagina - 1) * limite)
+      .limit(limite),
+    Pedido.countDocuments(consulta),
+  ])
+
+  return { pedidos, total, pagina, limite }
 }
 
 export async function buscarPedido(lojaId, id) {

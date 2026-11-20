@@ -11,12 +11,19 @@ import {
 } from './pedidos.service.js'
 
 export async function listar(req, res) {
-  const pedidos = await listarPedidos(req.usuario.lojaId, {
+  const resultado = await listarPedidos(req.usuario.lojaId, {
     status: req.query.status,
     hoje: req.query.hoje,
     arquivados: req.query.arquivados,
+    // Histórico: busca livre, período, paginação e "tudo" (ignora arquivado).
+    busca: req.query.busca,
+    periodo: req.query.periodo,
+    pagina: req.query.pagina,
+    limite: req.query.limite,
+    tudo: req.query.tudo,
   })
-  res.json({ pedidos })
+
+  res.json(resultado)
 }
 
 export async function detalhar(req, res) {
